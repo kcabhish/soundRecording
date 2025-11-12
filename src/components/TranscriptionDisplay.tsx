@@ -52,7 +52,7 @@ function TranscriptionDisplay({
         )}
       </div>
       
-      {/* Whisper transcribe button */}
+      {/* Whisper transcribe button (only for post-recording mode) */}
       {transcriptionMethod === 'whisper' && hasAudio && !transcript && !isTranscribing && (
         <div className="whisper-transcribe-section">
           <p className="transcribe-prompt">Recording complete. Click below to transcribe with Whisper API.</p>

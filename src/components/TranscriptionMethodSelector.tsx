@@ -87,7 +87,7 @@ function TranscriptionMethodSelector({
           <div className="method-info">
             <span className="method-name">🤖 OpenAI Whisper</span>
             <span className="method-description">
-              High-quality post-recording (Requires API key, ~$0.006/min)
+              High-quality post-recording transcription (Requires API key, ~$0.006/min)
             </span>
           </div>
         </label>
