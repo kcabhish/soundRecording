@@ -5,7 +5,7 @@ import RecordingIndicator from './components/RecordingIndicator'
 import RecordingControls from './components/RecordingControls'
 import PlaybackSection from './components/PlaybackSection'
 import InfoSection from './components/InfoSection'
-import TranscriptionToggle from './components/TranscriptionToggle'
+import TranscriptionMethodSelector from './components/TranscriptionMethodSelector'
 import TranscriptionDisplay from './components/TranscriptionDisplay'
 
 function App() {
@@ -18,7 +18,8 @@ function App() {
     transcript,
     interimTranscript,
     isTranscribing,
-    transcriptionEnabled,
+    transcriptionMethod,
+    whisperApiKey,
     isSpeechRecognitionSupported,
     startRecording,
     pauseRecording,
@@ -26,7 +27,9 @@ function App() {
     stopRecording,
     downloadRecording,
     clearRecording,
-    toggleTranscription,
+    setTranscriptionMethod,
+    saveWhisperApiKey,
+    transcribeWithWhisper,
     downloadTranscript,
     copyTranscript
   } = useAudioRecorder()
@@ -38,10 +41,12 @@ function App() {
       <ErrorMessage message={error} />
 
       <div className="recording-container">
-        <TranscriptionToggle
-          enabled={transcriptionEnabled}
-          onToggle={toggleTranscription}
-          isSupported={isSpeechRecognitionSupported}
+        <TranscriptionMethodSelector
+          currentMethod={transcriptionMethod}
+          onMethodChange={setTranscriptionMethod}
+          whisperApiKey={whisperApiKey}
+          onApiKeySave={saveWhisperApiKey}
+          isSpeechRecognitionSupported={isSpeechRecognitionSupported}
           disabled={isRecording}
         />
 
@@ -65,8 +70,11 @@ function App() {
           transcript={transcript}
           interimTranscript={interimTranscript}
           isTranscribing={isTranscribing}
+          transcriptionMethod={transcriptionMethod}
+          hasAudio={!!audioURL}
           onCopy={copyTranscript}
           onDownload={downloadTranscript}
+          onTranscribeWithWhisper={transcribeWithWhisper}
         />
 
         <PlaybackSection

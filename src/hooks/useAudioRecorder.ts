@@ -8,6 +8,8 @@ declare global {
   }
 }
 
+export type TranscriptionMethod = 'webspeech' | 'whisper' | 'none'
+
 export function useAudioRecorder() {
   const [isRecording, setIsRecording] = useState(false)
   const [isPaused, setIsPaused] = useState(false)
@@ -17,12 +19,22 @@ export function useAudioRecorder() {
   const [transcript, setTranscript] = useState<string>('')
   const [isTranscribing, setIsTranscribing] = useState(false)
   const [interimTranscript, setInterimTranscript] = useState<string>('')
-  const [transcriptionEnabled, setTranscriptionEnabled] = useState(false)
+  const [transcriptionMethod, setTranscriptionMethod] = useState<TranscriptionMethod>('none')
+  const [whisperApiKey, setWhisperApiKey] = useState<string>('')
+  const [audioBlobRef, setAudioBlobRef] = useState<Blob | null>(null)
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
   const timerRef = useRef<number | null>(null)
   const recognitionRef = useRef<any>(null)
+
+  // Load API key from localStorage on mount
+  useEffect(() => {
+    const savedApiKey = localStorage.getItem('whisperApiKey')
+    if (savedApiKey) {
+      setWhisperApiKey(savedApiKey)
+    }
+  }, [])
 
   useEffect(() => {
     // Initialize speech recognition if available
@@ -60,8 +72,8 @@ export function useAudioRecorder() {
       }
 
       recognition.onend = () => {
-        // Restart recognition if still recording and transcription is enabled
-        if (isRecording && !isPaused && transcriptionEnabled && recognitionRef.current) {
+        // Restart recognition if still recording and Web Speech method is enabled
+        if (isRecording && !isPaused && transcriptionMethod === 'webspeech' && recognitionRef.current) {
           try {
             recognition.start()
           } catch (e) {
@@ -89,11 +101,11 @@ export function useAudioRecorder() {
     }
   }, [])
 
-  // Handle transcription state changes
+  // Handle Web Speech API transcription state changes
   useEffect(() => {
     if (!recognitionRef.current) return
 
-    if (isRecording && transcriptionEnabled && !isPaused) {
+    if (isRecording && transcriptionMethod === 'webspeech' && !isPaused) {
       try {
         recognitionRef.current.start()
         setIsTranscribing(true)
@@ -111,7 +123,7 @@ export function useAudioRecorder() {
         console.log('Error stopping recognition:', e)
       }
     }
-  }, [isRecording, isPaused, transcriptionEnabled])
+  }, [isRecording, isPaused, transcriptionMethod])
 
   const startTimer = () => {
     timerRef.current = window.setInterval(() => {
@@ -174,6 +186,7 @@ export function useAudioRecorder() {
         console.log('Created blob:', audioBlob.size, 'bytes, type:', audioBlob.type)
         const url = URL.createObjectURL(audioBlob)
         setAudioURL(url)
+        setAudioBlobRef(audioBlob) // Store blob for Whisper API
         
         // Stop all tracks to release the microphone
         stream.getTracks().forEach(track => track.stop())
@@ -235,10 +248,60 @@ export function useAudioRecorder() {
     setRecordingTime(0)
     setTranscript('')
     setInterimTranscript('')
+    setAudioBlobRef(null)
   }
 
-  const toggleTranscription = () => {
-    setTranscriptionEnabled(prev => !prev)
+  const setTranscriptionMethodAndSave = (method: TranscriptionMethod) => {
+    setTranscriptionMethod(method)
+  }
+
+  const saveWhisperApiKey = (key: string) => {
+    setWhisperApiKey(key)
+    localStorage.setItem('whisperApiKey', key)
+  }
+
+  const transcribeWithWhisper = async () => {
+    if (!audioBlobRef) {
+      setError('No audio recording available to transcribe')
+      return
+    }
+
+    if (!whisperApiKey) {
+      setError('Please provide an OpenAI API key in settings')
+      return
+    }
+
+    setIsTranscribing(true)
+    setError('')
+
+    try {
+      // Convert webm to mp3 or keep as is - Whisper supports multiple formats
+      const formData = new FormData()
+      formData.append('file', audioBlobRef, 'recording.webm')
+      formData.append('model', 'whisper-1')
+      formData.append('language', 'en')
+
+      const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${whisperApiKey}`
+        },
+        body: formData
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error?.message || 'Transcription failed')
+      }
+
+      const data = await response.json()
+      setTranscript(data.text)
+      setIsTranscribing(false)
+    } catch (err: any) {
+      console.error('Whisper transcription error:', err)
+      setError(`Whisper API error: ${err.message}`)
+      setIsTranscribing(false)
+    }
   }
 
   const downloadTranscript = () => {
@@ -281,7 +344,8 @@ export function useAudioRecorder() {
     transcript,
     interimTranscript,
     isTranscribing,
-    transcriptionEnabled,
+    transcriptionMethod,
+    whisperApiKey,
     isSpeechRecognitionSupported: isSpeechRecognitionSupported(),
     startRecording,
     pauseRecording,
@@ -289,7 +353,9 @@ export function useAudioRecorder() {
     stopRecording,
     downloadRecording,
     clearRecording,
-    toggleTranscription,
+    setTranscriptionMethod: setTranscriptionMethodAndSave,
+    saveWhisperApiKey,
+    transcribeWithWhisper,
     downloadTranscript,
     copyTranscript
   }
