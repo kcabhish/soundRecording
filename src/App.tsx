@@ -5,6 +5,8 @@ import RecordingIndicator from './components/RecordingIndicator'
 import RecordingControls from './components/RecordingControls'
 import PlaybackSection from './components/PlaybackSection'
 import InfoSection from './components/InfoSection'
+import TranscriptionToggle from './components/TranscriptionToggle'
+import TranscriptionDisplay from './components/TranscriptionDisplay'
 
 function App() {
   const {
@@ -13,12 +15,20 @@ function App() {
     audioURL,
     recordingTime,
     error,
+    transcript,
+    interimTranscript,
+    isTranscribing,
+    transcriptionEnabled,
+    isSpeechRecognitionSupported,
     startRecording,
     pauseRecording,
     resumeRecording,
     stopRecording,
     downloadRecording,
-    clearRecording
+    clearRecording,
+    toggleTranscription,
+    downloadTranscript,
+    copyTranscript
   } = useAudioRecorder()
 
   return (
@@ -28,6 +38,13 @@ function App() {
       <ErrorMessage message={error} />
 
       <div className="recording-container">
+        <TranscriptionToggle
+          enabled={transcriptionEnabled}
+          onToggle={toggleTranscription}
+          isSupported={isSpeechRecognitionSupported}
+          disabled={isRecording}
+        />
+
         {isRecording && (
           <RecordingIndicator 
             isPaused={isPaused} 
@@ -42,6 +59,14 @@ function App() {
           onPause={pauseRecording}
           onResume={resumeRecording}
           onStop={stopRecording}
+        />
+
+        <TranscriptionDisplay
+          transcript={transcript}
+          interimTranscript={interimTranscript}
+          isTranscribing={isTranscribing}
+          onCopy={copyTranscript}
+          onDownload={downloadTranscript}
         />
 
         <PlaybackSection

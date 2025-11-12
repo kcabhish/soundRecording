@@ -1,23 +1,117 @@
 import { useState, useRef, useEffect } from 'react'
 
+// Extend Window interface for webkit prefix
+declare global {
+  interface Window {
+    webkitSpeechRecognition: any;
+    SpeechRecognition: any;
+  }
+}
+
 export function useAudioRecorder() {
   const [isRecording, setIsRecording] = useState(false)
   const [isPaused, setIsPaused] = useState(false)
   const [audioURL, setAudioURL] = useState<string>('')
   const [recordingTime, setRecordingTime] = useState(0)
   const [error, setError] = useState<string>('')
+  const [transcript, setTranscript] = useState<string>('')
+  const [isTranscribing, setIsTranscribing] = useState(false)
+  const [interimTranscript, setInterimTranscript] = useState<string>('')
+  const [transcriptionEnabled, setTranscriptionEnabled] = useState(false)
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
   const timerRef = useRef<number | null>(null)
+  const recognitionRef = useRef<any>(null)
 
   useEffect(() => {
+    // Initialize speech recognition if available
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (SpeechRecognition) {
+      const recognition = new SpeechRecognition()
+      recognition.continuous = true
+      recognition.interimResults = true
+      recognition.lang = 'en-US'
+
+      recognition.onresult = (event: any) => {
+        let interim = ''
+        let final = ''
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcriptPiece = event.results[i][0].transcript
+          if (event.results[i].isFinal) {
+            final += transcriptPiece + ' '
+          } else {
+            interim += transcriptPiece
+          }
+        }
+
+        if (final) {
+          setTranscript(prev => prev + final)
+        }
+        setInterimTranscript(interim)
+      }
+
+      recognition.onerror = (event: any) => {
+        console.error('Speech recognition error:', event.error)
+        if (event.error !== 'no-speech' && event.error !== 'aborted') {
+          setError(`Transcription error: ${event.error}`)
+        }
+      }
+
+      recognition.onend = () => {
+        // Restart recognition if still recording and transcription is enabled
+        if (isRecording && !isPaused && transcriptionEnabled && recognitionRef.current) {
+          try {
+            recognition.start()
+          } catch (e) {
+            console.log('Recognition restart failed:', e)
+          }
+        } else {
+          setIsTranscribing(false)
+        }
+      }
+
+      recognitionRef.current = recognition
+    }
+
     return () => {
       if (timerRef.current) {
         clearInterval(timerRef.current)
       }
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop()
+        } catch (e) {
+          console.log('Error stopping recognition:', e)
+        }
+      }
     }
   }, [])
+
+  // Handle transcription state changes
+  useEffect(() => {
+    if (!recognitionRef.current) return
+
+    if (isRecording && transcriptionEnabled && !isPaused) {
+      try {
+        recognitionRef.current.start()
+        setIsTranscribing(true)
+      } catch (e: any) {
+        if (e.message !== 'recognition already started') {
+          console.error('Error starting recognition:', e)
+        }
+      }
+    } else {
+      try {
+        recognitionRef.current.stop()
+        setIsTranscribing(false)
+        setInterimTranscript('')
+      } catch (e) {
+        console.log('Error stopping recognition:', e)
+      }
+    }
+  }, [isRecording, isPaused, transcriptionEnabled])
 
   const startTimer = () => {
     timerRef.current = window.setInterval(() => {
@@ -139,6 +233,43 @@ export function useAudioRecorder() {
     }
     setAudioURL('')
     setRecordingTime(0)
+    setTranscript('')
+    setInterimTranscript('')
+  }
+
+  const toggleTranscription = () => {
+    setTranscriptionEnabled(prev => !prev)
+  }
+
+  const downloadTranscript = () => {
+    if (transcript) {
+      const blob = new Blob([transcript], { type: 'text/plain' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `transcript-${new Date().toISOString()}.txt`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    }
+  }
+
+  const copyTranscript = async () => {
+    if (transcript) {
+      try {
+        await navigator.clipboard.writeText(transcript)
+        return true
+      } catch (err) {
+        console.error('Failed to copy transcript:', err)
+        return false
+      }
+    }
+    return false
+  }
+
+  const isSpeechRecognitionSupported = () => {
+    return !!(window.SpeechRecognition || window.webkitSpeechRecognition)
   }
 
   return {
@@ -147,11 +278,19 @@ export function useAudioRecorder() {
     audioURL,
     recordingTime,
     error,
+    transcript,
+    interimTranscript,
+    isTranscribing,
+    transcriptionEnabled,
+    isSpeechRecognitionSupported: isSpeechRecognitionSupported(),
     startRecording,
     pauseRecording,
     resumeRecording,
     stopRecording,
     downloadRecording,
-    clearRecording
+    clearRecording,
+    toggleTranscription,
+    downloadTranscript,
+    copyTranscript
   }
 }
